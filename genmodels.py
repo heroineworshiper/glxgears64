@@ -54,28 +54,28 @@ def toAngle(a):
 
 
 # tabulate sin * r
-def circle_table(title, r):
+def circle_table(sin_title, cos_title, r):
     data = []
     for i in range(0, 320):
         data.append(r * math.sin(float(i) / 256 * 2 * math.pi));
         data[i] = int(data[i]) & 0xff
         
         
-    print_table(data[0:64], 'sin_' + title)
+    print_table(data[0:64], sin_title)
 # cos overlaps sin
-    print_table(data[64:320], 'cos_' + title)
+    print_table(data[64:320], cos_title)
 
 # generate a 2D gear
 # from https://github.com/davidanthonygardner/glxgears/blob/master/glxgears.c
 # and 3d_arduino/genmodel.py
-def gear(inner_radius, outer_radius, teeth, tooth_depth, shaft_points, title):
+def gear(inner_radius, outer_radius, teeth, tooth_depth, shaft_points, gear, shaft):
 # premultiplied sin * cos for every angle
 # sin * (outer radius - tooth_depth / 2.0)
-    circle_table(title + '_outer1:', outer_radius - tooth_depth / 2.0)
+    circle_table(gear + '_sin_r1:', gear + '_cos_r1:', outer_radius - tooth_depth / 2.0)
 # sin * (outer radius + tooth_depth / 2.0)
-    circle_table(title + '_outer2:', outer_radius + tooth_depth / 2.0)
+    circle_table(gear + '_sin_r2:', gear + '_cos_r2:', outer_radius + tooth_depth / 2.0)
 # sin * inner radius
-    circle_table(title + '_inner:', inner_radius)
+    circle_table(shaft + '_sin_r:', shaft + '_cos_r:', inner_radius)
 
 # angle tables
     teeth_a = []
@@ -85,7 +85,6 @@ def gear(inner_radius, outer_radius, teeth, tooth_depth, shaft_points, title):
     r2 = outer_radius + tooth_depth / 2.0
     da = 2.0 * math.pi / teeth / 4.0
 
-    da = 2.0 * math.pi / teeth / 4.0;
 # teeth angles
     for i in range(0, teeth + 1):
        angle = i * 2.0 * math.pi / (teeth + 1);
@@ -99,10 +98,10 @@ def gear(inner_radius, outer_radius, teeth, tooth_depth, shaft_points, title):
         angle = i * 2.0 * math.pi / shaft_points
         shaft_a.append(toAngle(angle))
 
-    print_table(teeth_a, title + "_teeth_a:")
-    print_table(shaft_a, title + "_shaft_a:")
-    string2 = title + "_shaft_n = %d" % len(shaft_a)
-    string1 = title + "_teeth_n = %d" % len(teeth_a)
+    print_table(teeth_a, gear + "_angles:")
+    print_table(shaft_a, shaft + "_angles:")
+    string2 = shaft + "_n = %d" % len(shaft_a)
+    string1 = gear + "_n = %d" % len(teeth_a)
     print(string1.upper())
     print(string2.upper())
     print("; total bytes: %s" % \
@@ -111,29 +110,10 @@ def gear(inner_radius, outer_radius, teeth, tooth_depth, shaft_points, title):
 
 
 
-def printModel(output, title):
-    print("%s" % title)
-    string = ""
-    line = 0
-    for i in range(0, len(output)):
-        if line == 0:
-            string = "    .byte "
-        if line > 0:
-            string += ", "
-
-        string += "$%02x, $%02x" % (int(output[i].x), int(output[i].y * 63 / 2 / math.pi))
-        line += 1
-        if line >= 8:
-            print(string)
-            line = 0
-    if line > 0:
-        print(string)
-    print("// count=%d bytes=%d" % (len(output), len(output) * 2))
-
 # from 3d_arduino/genmodel.py
-gear(10.0, 50.0, 20, 5, 10, "gear1")
-#printModel(teeth, ".gear1_teeth:")
-#printModel(shaft, ".gear1_shaft:")
+#gear(10, 50, 20, 5, 10, "gear1", "shaft1")
+gear(20, 70, 10, 20, 10, "gear1", "shaft1")
+
 
 
 

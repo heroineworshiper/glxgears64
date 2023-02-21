@@ -27,45 +27,45 @@ common_init:
     ldy	#187
 	sty	$d011		;bitmap mode
 
-	lda	$dd02
+	lda	$DD02
 	ora	#3
 	sta	$DD02		;CIA-2 I/O default value 		
 
-	lda	$dd00		;CIA-2 bank 1 for VIC
-	and	#252
-	ora	#2
+	lda	$dd00		; set the VIC bank
+	and	#%11111100
+	ora	#%00000010  ; $4000
 	sta	$dd00
 
-	lda $d018
-	and	#15
-	ora	#112
-	sta	$d018		;matrix from 16384+7168=23552
+	lda $d018       ; set color memory relative to VIC bank
+	and	#%00001111
+	ora	#%01110000  ; vic bank + $1c00
+	sta	$d018
 
-	lda	$d018
-	and	#240
-	ora	#8
-	sta	$d018		;bmp base from 16384+8192 = 24576		
+	lda	$d018       ; set bitmap memory relative to VIC bank
+	and	#%11110000
+	ora	#%00001000  ; vic bank + $2000
+	sta	$d018	
 
 
 ; set color memory to white pen on dark blue paper (also clears sprite pointers) on screen 2
 	ldx	#$00
-	lda	#22
+	lda	#$16
 loopcol:
-	sta	BMP0_COLOR,x		;sta	$400,x
-	sta	BMP0_COLOR+$100,x	;sta	$500,x
-	sta	BMP0_COLOR+$200,x	;sta	$600,x
-	sta	BMP0_COLOR+$300,x	;sta	$700,x
+	sta	BMP0_COLOR,x	
+	sta	BMP0_COLOR+$100,x
+	sta	BMP0_COLOR+$200,x
+	sta	BMP0_COLOR+$300,x
 	inx
 	bne	loopcol
 
 ; set color memory to white pen on dark blue paper (also clears sprite pointers) on screen 1
 	ldx	#$00
-	lda	#22
+	lda	#$16
 loopcol2:
-    sta	BMP1_COLOR,x		;sta	$400,x
-	sta	BMP1_COLOR+$100,x	;sta	$500,x
-	sta	BMP1_COLOR+$200,x	;sta	$600,x
-	sta	BMP1_COLOR+$300,x	;sta	$700,x
+    sta	BMP1_COLOR,x	
+	sta	BMP1_COLOR+$100,x
+	sta	BMP1_COLOR+$200,x
+	sta	BMP1_COLOR+$300,x
 	inx
 	bne	loopcol2
 
@@ -85,7 +85,8 @@ loopcol2:
 ;    sta y1
 ;    jsr plot
 ;    jsr swap_screen
-
+;stop:
+;   jmp stop
 
 ; test line
 ;X1 = 0
@@ -115,7 +116,7 @@ loopcol2:
 ; starting rotation angles
     lda #0
     sta rx                  
-    lda #0
+    lda #224
     sta ry
     rts
 
@@ -542,18 +543,13 @@ swap_screen:
         sta ytablemod + 2
 
 	    lda $d018
-	    and	#15
-	    ora	#112
-	    sta	$d018		;matrix from 16384+7168=23552
+	    and	#%00001111  ; set color memory relative to VIC bank
+	    ora	#%01110000  ; vic bank + $1c00
+	    sta	$d018
 
-	    lda	$d018
-	    and	#240
-	    ora	#8
-	    sta	$d018		;bmp base from 16384+8192 = 24576
-
-        lda	$dd00		;CIA-2 bank 1 for VIC
-	    and	#252
-	    ora	#2
+        lda	$dd00		; set the VIC bank
+	    and	#%11111100
+	    ora	#%00000010  ; $4000
 	    sta	$dd00
 
 
@@ -569,16 +565,18 @@ screen2_active:
     lda #>ytablehigh_BMP0
     sta ytablemod + 2
 
-	ldy	#28
-	sty	$d018		;bitmap base 8192
 
-    lda $d018
-    and #15
-    ora #16
-    sta $d018           ;default video screen memory (1024) 
+	lda $d018           ; set color memory relative to VIC bank
+	and	#%00001111
+;	ora	#%01110000      ; vic bank + $1c00
+	ora	#%00010000      ; only vic bank + $0400 works
+	sta	$d018
 
-    lda	#$17
-	sta	$dd00		;default vic-ii bank
+	lda	$dd00		    ; set the VIC bank
+	and	#%11111100
+	ora	#%00000001      ; $8000
+	sta	$dd00
+
 
 ; toggle flag
     dec current_screen

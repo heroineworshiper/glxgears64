@@ -1,5 +1,5 @@
 ; interactive rotation with cursor keys
-;INTERACTIVE = 1
+INTERACTIVE = 1
 
 ; use 16 bit X
 ;USE_X16 = 1
@@ -11,10 +11,20 @@
 .include        "zeropage.inc"
 
 ; macros
-BMP0 = $6000   ; starting address of bitmap
-BMP1 = $2000
-BMP0_COLOR = $5c00
-BMP1_COLOR = $0400
+BMP0 = $6000   ; starting address of bitmaps
+;BMP1 = $2000
+BMP1 = $a000
+BMP0_COLOR = $5c00 ; starting address of color
+;BMP1_COLOR = $0400
+BMP1_COLOR = $8400
+
+
+.macro SET_LITERAL16 address, value
+    lda #<value
+    sta address
+    lda #>value
+    sta address + 1
+.endmacro
 
 ; twos complement of 16 bit register
 .macro TWOS16 hi, lo
@@ -103,6 +113,7 @@ s_x:             .res 1   ; sin for the X rotation
 c_y:             .res 1   ; cos for the Y rotation
 s_y:             .res 1   ; sin for the Y rotation
 current_point:   .res	1
+current_point2:  .res	1
 draw_count:      .res	1
 product2_hi:     .res	1 ; temporary multiply result
 product2_lo:     .res	1

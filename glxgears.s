@@ -7,12 +7,19 @@
 .segment	"DATA"
 
 
-MAX_COORDS = 100
+MAX_COORDS = 200
+
+GEAR1_Z1 = #10
+GEAR1_Z2 = #250
 
 ; total coordinates to draw
 total_coords: .res 1
 ; Z rotation of gears
 rz:           .res	1
+
+; range of points to draw
+start_point: .res 1
+end_point:   .res 1
 
 ; starting coordinates in two's complement form
 x_coords:   .res MAX_COORDS
@@ -38,71 +45,233 @@ vey:        .res MAX_COORDS
 .proc	_main: near
 
 ; simplest way to create a memory hole for the bitmaps
-    jmp mane
-.res $7700
+;    jmp mane
+;.res $7700
+;mane:
 
-mane:
+
     jsr common_init
 
 
-cube_loop:
-; draw gear1
-    lda #GEAR1_TEETH_N      ; must be a multiple of 4
-;    lda #16 
+.macro PROCEDURAL_GEAR total, sin_r1, cos_r1, sin_r2, cos_r2, angles
+    lda #total      ; must be a multiple of 4
     sta total_coords
+; modify code
+    SET_LITERAL16 gear_mod1 + 1, sin_r1
+    SET_LITERAL16 gear_mod2 + 1, cos_r1
+    SET_LITERAL16 gear_mod3 + 1, sin_r2
+    SET_LITERAL16 gear_mod4 + 1, cos_r2
+    SET_LITERAL16 gear_mod5 + 1, sin_r2
+    SET_LITERAL16 gear_mod6 + 1, cos_r2
+    SET_LITERAL16 gear_mod7 + 1, sin_r1
+    SET_LITERAL16 gear_mod8 + 1, cos_r1
+    SET_LITERAL16 gear_mod9 + 1, angles
+    SET_LITERAL16 gear_mod10 + 1, angles
+    SET_LITERAL16 gear_mod11 + 1, angles
+    SET_LITERAL16 gear_mod12 + 1, angles
+    jsr procedural_gear
+    jsr do_rotate
+.endmacro
 
+
+.macro PROCEDURAL_SHAFT total, sin_r, cos_r, angles
+    lda #total
+    sta total_coords
+; modify code
+    SET_LITERAL16 shaft_mod1 + 1, angles
+    SET_LITERAL16 shaft_mod2 + 1, sin_r
+    SET_LITERAL16 shaft_mod3 + 1, cos_r
+    jsr procedural_shaft
+    jsr do_rotate
+.endmacro
+
+mane_loop:
+; clear the screen
+    jsr clear_part
+; draw gear1
+    PROCEDURAL_GEAR GEAR1_N, gear1_sin_r1, gear1_cos_r1, gear1_sin_r2, gear1_cos_r2, gear1_angles
+    PROCEDURAL_SHAFT SHAFT1_N, shaft1_sin_r, shaft1_cos_r, shaft1_angles
+    jsr swap_screen
+
+; user rotation
+.ifdef INTERACTIVE
+;    jsr getc
+; read the keyboard buffer
+    jsr $ffe4
+    beq flush_keypress
+        jsr getin
+
+; empty the buffer
+flush_keypress:
+    jsr $ffe4
+    bne flush_keypress
+
+; auto rotate Z
+    inc rz
+
+.else
+
+; automatic XY rotation
+    inc rx
+    inc ry
+    inc rx
+    inc ry
+    inc rx
+    inc ry
+    inc rx
+    inc ry
+    inc rz
+.endif
+
+; repeat
+    jmp mane_loop
+
+; handle a buffered keypress
+getin:
+    cmp #$91     ; up
+    bne getin2
+        dec rx   ; decrease X rotation
+        dec rx   ; decrease X rotation
+        dec rx   ; decrease X rotation
+        dec rx   ; decrease X rotation
+        rts
+getin2:
+    cmp #$11     ; down
+    bne getin3
+        inc rx   ; increase X rotation
+        inc rx   ; increase X rotation
+        inc rx   ; increase X rotation
+        inc rx   ; increase X rotation
+        rts
+getin3:
+    cmp #$9d     ; left
+    bne getin4
+        inc ry   ; increase Y rotation
+        inc ry   ; increase Y rotation
+        inc ry   ; increase Y rotation
+        inc ry   ; increase Y rotation
+        rts
+getin4:
+    cmp #$1d     ; right
+    bne getin5
+        dec ry   ; decrease Y rotation
+        dec ry   ; decrease Y rotation
+        dec ry   ; decrease Y rotation
+        dec ry   ; decrease Y rotation
+        rts
+getin5:
+    rts
+    
+
+procedural_gear:
 ; convert polar to XYZ with Z rotation
     ldy #0                  ; the current point
-polar_loop:
-    lda gear1_teeth_a, y    ; angle of polygon point
+gear_loop:
+gear_mod9:
+    lda gear1_angles, y    ; angle of polygon point
     adc rz                  ; rotate about Z
     tax
-    lda sin_gear1_outer1, x ; y = R1 * sin(angle)
+gear_mod1:
+    lda gear1_sin_r1, x ; y = R1 * sin(angle)
     sta y_coords, y
-    lda cos_gear1_outer1, x ; x = R1 * cos(angle)
+gear_mod2:
+    lda gear1_cos_r1, x ; x = R1 * cos(angle)
     sta x_coords, y
-    lda #00                 ; Z = 0
+    lda #GEAR1_Z1           ; Z = 0
     sta z_coords, y
     iny
 
-    lda gear1_teeth_a, y    ; angle of polygon point
+gear_mod10:
+    lda gear1_angles, y    ; angle of polygon point
     adc rz                  ; rotate about Z
     tax
-    lda sin_gear1_outer2, x ; y = R2 * sin(angle)
+gear_mod3:
+    lda gear1_sin_r2, x ; y = R2 * sin(angle)
     sta y_coords, y
-    lda cos_gear1_outer2, x ; x = R2 * cos(angle)
+gear_mod4:
+    lda gear1_cos_r2, x ; x = R2 * cos(angle)
     sta x_coords, y
-    lda #00                 ; Z = 0
+    lda #GEAR1_Z1           ; Z = 0
     sta z_coords, y
     iny
 
-    lda gear1_teeth_a, y    ; angle of polygon point
+gear_mod11:
+    lda gear1_angles, y    ; angle of polygon point
     adc rz                  ; rotate about Z
     tax
-    lda sin_gear1_outer2, x ; y = R2 * sin(angle)
+gear_mod5:
+    lda gear1_sin_r2, x ; y = R2 * sin(angle)
     sta y_coords, y
-    lda cos_gear1_outer2, x ; x = R2 * cos(angle)
+gear_mod6:
+    lda gear1_cos_r2, x ; x = R2 * cos(angle)
     sta x_coords, y
-    lda #00                 ; Z = 0
+    lda #GEAR1_Z1           ; Z = 0
     sta z_coords, y
     iny
 
-    lda gear1_teeth_a, y    ; angle of polygon point
+gear_mod12:
+    lda gear1_angles, y    ; angle of polygon point
     adc rz                  ; rotate about Z
     tax
-    lda sin_gear1_outer1, x ; y = R1 * sin(angle)
+gear_mod7:
+    lda gear1_sin_r1, x ; y = R1 * sin(angle)
     sta y_coords, y
-    lda cos_gear1_outer1, x ; x = R1 * cos(angle)
+gear_mod8:
+    lda gear1_cos_r1, x ; x = R1 * cos(angle)
     sta x_coords, y
-    lda #00                 ; Z = 0
+    lda #GEAR1_Z1           ; Z = 0
     sta z_coords, y
     iny
 
     cpy total_coords
-        bne polar_loop
+        bne gear_loop
+
+; copy first coordinate with Z shifted to start the back side
+    lda x_coords
+    sta x_coords,y
+    lda y_coords
+    sta y_coords,y
+    lda #GEAR1_Z2
+    sta z_coords,y
+    inc total_coords
+; end procedural_gear
+    rts
 
 
 
+procedural_shaft:
+; convert polar to XYZ with Z rotation
+    ldy #0                  ; the current point
+shaft_loop:
+shaft_mod1:
+    lda shaft1_angles, y    ; angle of polygon point
+    adc rz                  ; rotate about Z
+    tax
+shaft_mod2:
+    lda shaft1_sin_r, x    ; y = R1 * sin(angle)
+    sta y_coords, y
+shaft_mod3:
+    lda shaft1_cos_r, x     ; x = R1 * cos(angle)
+    sta x_coords, y
+    lda #GEAR1_Z1           ; Z = 0
+    sta z_coords, y
+    iny
+    cpy total_coords
+        bne shaft_loop
+
+; copy first coordinate with Z shifted to start the back side
+    lda x_coords
+    sta x_coords,y
+    lda y_coords
+    sta y_coords,y
+    lda #GEAR1_Z2
+    sta z_coords,y
+    inc total_coords
+; end procedural_shaft
+    rts
+
+do_rotate:
+; rotate all the coordinates about XY
 ; look up X rotation
     ldx rx
     lda cos_table, x
@@ -119,7 +288,6 @@ polar_loop:
     sta s_y
 
 
-; rotate the polygon about XY
     lda #0                  ; the current point
     sta current_point 
 rotate_loop:
@@ -201,9 +369,68 @@ rotate_loop:
     lda product2_hi
     sta zd_coords, y
 
+; next point
+    iny
+    sty current_point 
+    cpy total_coords
+    beq create_back
+        jmp rotate_loop 
+
+create_back:
+; create the back side by offsetting the front side
+; subtract starting front coord from starting back coord
+    dec total_coords
+    ldy total_coords
+    sec
+    lda xd_coords,y
+    sbc xd_coords
+    sta temp_x
+
+    sec
+    lda yd_coords,y
+    sbc yd_coords
+    sta temp_y
+
+    sec
+    lda zd_coords,y
+    sbc zd_coords
+    sta temp_z
+
+; add difference to all front coords
+    iny    ; skip 1st coord
+    ldx #1
+
+create_back_loop:
+    clc
+    lda xd_coords,x
+    adc temp_x
+    sta xd_coords,y
+
+    clc
+    lda yd_coords,x
+    adc temp_y
+    sta yd_coords,y
+
+    clc
+    lda zd_coords,x
+    adc temp_z
+    sta zd_coords,y
+
+    inx
+    iny
+    cpx total_coords
+    beq project_it
+        jmp create_back_loop
 
 
+; convert all the 3D coordinates to XY
+project_it:
+    asl total_coords        ; double the coordinates to process both sides
+    lda #0                  ; the current point
+    sta current_point 
 
+project_loop:
+    ldy current_point 
 ; get the projection coefficient based on signed Z 
     ldx zd_coords, y 
     lda proj_table, x
@@ -241,32 +468,35 @@ rotate_loop:
     sty current_point 
     cpy total_coords
     beq draw_it
-        jmp rotate_loop 
-                
-				
+        jmp project_loop 
+
+
 draw_it:
-    jsr clear_part
+; draw front side
+    lsr total_coords
+    lda #0
+    sta start_point
+    lda total_coords
+    sta end_point
     jsr draw_closed_polygon
-    jsr swap_screen
 
-; user rotation
-.ifdef INTERACTIVE
-    jsr getc
-.else
+; draw back side
+    lda total_coords
+    sta start_point
+    sta end_point
+    asl end_point ; shift to end of back side
+    jsr draw_closed_polygon
 
-; automatic XY rotation
-;    inc rx
-;    inc ry
-    inc rz
-.endif
+    jsr draw_joiners
+; end do_rotate
+    rts
 
-; repeat
-    jmp cube_loop
+
 
 
 draw_closed_polygon:
 ; load starting point
-    ldy #$00
+    ldy start_point
     sty current_point 
     lda vex, y
     sta x1_lo
@@ -291,11 +521,11 @@ polygon_loop:
     sta y1
 
     ldy current_point
-    cpy total_coords
+    cpy end_point
     bne polygon_loop
 
 ; close the polygon
-        ldy #$00
+        ldy start_point
         lda vex, y
         sta x2_lo
         lda vey, y
@@ -304,6 +534,32 @@ polygon_loop:
         rts
 
 
+draw_joiners:
+    lda #0
+    sta current_point
+    lda total_coords
+    sta current_point2
+
+joiner_loop:
+    ldy current_point
+    lda vex, y
+    sta x1_lo
+    lda vey, y
+    sta y1
+    
+    ldy current_point2
+    lda vex, y
+    sta x2_lo
+    lda vey, y
+    sta y2
+    
+    jsr draw_line
+    inc current_point
+    inc current_point2
+    lda current_point
+    cmp total_coords
+    bne joiner_loop
+        rts
 
 .include "common_code.inc"
 
