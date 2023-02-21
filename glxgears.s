@@ -27,13 +27,18 @@
 
 MAX_COORDS = 200
 
-GEAR1_Z1 = 10
-GEAR1_Z2 = 250
+GEAR1_W = 10
+GEAR2_W = 5
+GEAR3_W = 20
 
 ; total coordinates to draw
 total_coords: .res 1
 ; Z rotation of gears
 rz:           .res	1
+temp_rz:      .res  1
+gear_z1:      .res  1
+gear_z2:      .res  1
+
 
 ; range of points to draw
 start_point: .res 1
@@ -71,9 +76,19 @@ vey:        .res MAX_COORDS
     jsr common_init
 
 
-.macro PROCEDURAL_GEAR total, sin_r1, cos_r1, sin_r2, cos_r2, angles
+.macro PROCEDURAL_GEAR total, sin_r1, cos_r1, sin_r2, cos_r2, angles, width
     lda #total      ; must be a multiple of 4
     sta total_coords
+
+; -width -> z1
+    lda #00
+    sec
+    sbc #width
+    sta gear_z1
+; width -> z2
+    lda #width
+    sta gear_z2
+
 ; modify code
     SET_LITERAL16 gear_mod1 + 1, sin_r1
     SET_LITERAL16 gear_mod2 + 1, cos_r1
@@ -92,9 +107,17 @@ vey:        .res MAX_COORDS
 .endmacro
 
 
-.macro PROCEDURAL_SHAFT total, sin_r, cos_r, angles
+.macro PROCEDURAL_SHAFT total, sin_r, cos_r, angles, width
     lda #total
     sta total_coords
+; -width -> z1
+    lda #00
+    sec
+    sbc #width
+    sta gear_z1
+; width -> z2
+    lda #width
+    sta gear_z2
 ; modify code
     SET_LITERAL16 shaft_mod1 + 1, angles
     SET_LITERAL16 shaft_mod2 + 1, sin_r
@@ -107,8 +130,35 @@ mane_loop:
 ; clear the screen
     jsr clear_part
 ; draw gear1
-    PROCEDURAL_GEAR GEAR1_N, gear1_sin_r1, gear1_cos_r1, gear1_sin_r2, gear1_cos_r2, gear1_angles
-    PROCEDURAL_SHAFT SHAFT1_N, shaft1_sin_r, shaft1_cos_r, shaft1_angles
+    PROCEDURAL_GEAR GEAR1_N, gear1_sin_r1, gear1_cos_r1, gear1_sin_r2, gear1_cos_r2, gear1_angles, GEAR1_W
+    PROCEDURAL_SHAFT SHAFT1_N, shaft1_sin_r, shaft1_cos_r, shaft1_angles, GEAR1_W
+; reverse rotation & double speed
+    lda rz
+    sta temp_rz
+    lda #00
+    sec
+    sbc rz
+    sta rz
+    asl rz
+; phase offset
+    lda #11
+    clc
+    adc rz
+    sta rz
+; draw gear2
+    PROCEDURAL_GEAR GEAR2_N, gear2_sin_r1, gear2_cos_r1, gear2_sin_r2, gear2_cos_r2, gear2_angles, GEAR2_W
+    PROCEDURAL_SHAFT SHAFT2_N, shaft2_sin_r, shaft2_cos_r, shaft2_angles, GEAR2_W
+; phase offset
+    lda rz
+    sec
+    sbc #11
+    sta rz
+; draw gear3
+    PROCEDURAL_GEAR GEAR3_N, gear3_sin_r1, gear3_cos_r1, gear3_sin_r2, gear3_cos_r2, gear3_angles, GEAR3_W
+    PROCEDURAL_SHAFT SHAFT3_N, shaft3_sin_r, shaft3_cos_r, shaft3_angles, GEAR3_W
+; restore rotation
+    lda temp_rz
+    sta rz
     jsr swap_screen
 
 ; user rotation
@@ -148,34 +198,34 @@ flush_keypress:
 getin:
     cmp #$91     ; up
     bne getin2
-        dec rx   ; decrease X rotation
-        dec rx   ; decrease X rotation
-        dec rx   ; decrease X rotation
-        dec rx   ; decrease X rotation
+        sec
+        lda rx
+        sbc #8
+        sta rx
         rts
 getin2:
     cmp #$11     ; down
     bne getin3
-        inc rx   ; increase X rotation
-        inc rx   ; increase X rotation
-        inc rx   ; increase X rotation
-        inc rx   ; increase X rotation
+        clc
+        lda rx
+        adc #8
+        sta rx
         rts
 getin3:
     cmp #$9d     ; left
     bne getin4
-        inc ry   ; increase Y rotation
-        inc ry   ; increase Y rotation
-        inc ry   ; increase Y rotation
-        inc ry   ; increase Y rotation
+        clc
+        lda ry
+        adc #8
+        sta ry
         rts
 getin4:
     cmp #$1d     ; right
     bne getin5
-        dec ry   ; decrease Y rotation
-        dec ry   ; decrease Y rotation
-        dec ry   ; decrease Y rotation
-        dec ry   ; decrease Y rotation
+        sec
+        lda ry
+        sbc #8
+        sta ry
         rts
 getin5:
     rts
@@ -186,35 +236,35 @@ procedural_gear:
     ldy #0                  ; the current point
 gear_loop:
 gear_mod9:
-    lda gear1_angles, y    ; angle of polygon point
+    lda gear1_angles, y     ; angle of polygon point
     adc rz                  ; rotate about Z
     tax
 gear_mod1:
-    lda gear1_sin_r1, x ; y = R1 * sin(angle)
+    lda gear1_sin_r1, x     ; y = R1 * sin(angle)
     sta y_coords, y
 gear_mod2:
-    lda gear1_cos_r1, x ; x = R1 * cos(angle)
+    lda gear1_cos_r1, x     ; x = R1 * cos(angle)
     sta x_coords, y
-    lda #GEAR1_Z1           ; Z = 0
+    lda gear_z1
     sta z_coords, y
     iny
 
 gear_mod10:
-    lda gear1_angles, y    ; angle of polygon point
+    lda gear1_angles, y     ; angle of polygon point
     adc rz                  ; rotate about Z
     tax
 gear_mod3:
-    lda gear1_sin_r2, x ; y = R2 * sin(angle)
+    lda gear1_sin_r2, x     ; y = R2 * sin(angle)
     sta y_coords, y
 gear_mod4:
-    lda gear1_cos_r2, x ; x = R2 * cos(angle)
+    lda gear1_cos_r2, x     ; x = R2 * cos(angle)
     sta x_coords, y
-    lda #GEAR1_Z1           ; Z = 0
+    lda gear_z1
     sta z_coords, y
     iny
 
 gear_mod11:
-    lda gear1_angles, y    ; angle of polygon point
+    lda gear1_angles, y     ; angle of polygon point
     adc rz                  ; rotate about Z
     tax
 gear_mod5:
@@ -223,12 +273,12 @@ gear_mod5:
 gear_mod6:
     lda gear1_cos_r2, x ; x = R2 * cos(angle)
     sta x_coords, y
-    lda #GEAR1_Z1           ; Z = 0
+    lda gear_z1
     sta z_coords, y
     iny
 
 gear_mod12:
-    lda gear1_angles, y    ; angle of polygon point
+    lda gear1_angles, y     ; angle of polygon point
     adc rz                  ; rotate about Z
     tax
 gear_mod7:
@@ -237,7 +287,7 @@ gear_mod7:
 gear_mod8:
     lda gear1_cos_r1, x ; x = R1 * cos(angle)
     sta x_coords, y
-    lda #GEAR1_Z1           ; Z = 0
+    lda gear_z1
     sta z_coords, y
     iny
 
@@ -249,7 +299,7 @@ gear_mod8:
     sta x_coords,y
     lda y_coords
     sta y_coords,y
-    lda #GEAR1_Z2
+    lda gear_z2
     sta z_coords,y
     inc total_coords
 ; end procedural_gear
@@ -271,7 +321,7 @@ shaft_mod2:
 shaft_mod3:
     lda shaft1_cos_r, x     ; x = R1 * cos(angle)
     sta x_coords, y
-    lda #GEAR1_Z1           ; Z = 0
+    lda gear_z1
     sta z_coords, y
     iny
     cpy total_coords
@@ -282,7 +332,7 @@ shaft_mod3:
     sta x_coords,y
     lda y_coords
     sta y_coords,y
-    lda #GEAR1_Z2
+    lda gear_z2
     sta z_coords,y
     inc total_coords
 ; end procedural_shaft

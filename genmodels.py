@@ -27,6 +27,9 @@
 # Each point has r & angle in hex.  Radius is 0-0xff Angle is 0-0x3f
 # Each gear has 2 polygons: teeth & shaft
 
+# python genmodels.py > gears.inc
+
+
 import math
 
 
@@ -50,32 +53,44 @@ def print_table(data, text):
         print(string)
     
 def toAngle(a):
-    return int(a * 255 / 2 / math.pi)
+    return int(a * 255 / 2 / math.pi) & 0xff
 
 
 # tabulate sin * r
-def circle_table(sin_title, cos_title, r):
-    data = []
-    for i in range(0, 320):
-        data.append(r * math.sin(float(i) / 256 * 2 * math.pi));
-        data[i] = int(data[i]) & 0xff
-        
-        
-    print_table(data[0:64], sin_title)
+def circle_table(sin_title, cos_title, r, x, y):
+    if x == 0 and y == 0:
+        data = []
+        for i in range(0, 320):
+            data.append(r * math.sin(float(i) / 256 * 2 * math.pi));
+            data[i] = int(data[i]) & 0xff
+        print_table(data[0:64], sin_title)
 # cos overlaps sin
-    print_table(data[64:320], cos_title)
+        print_table(data[64:320], cos_title)
+    else:
+        data = []
+        for i in range(0, 256):
+            data.append(y + r * math.sin(float(i) / 256 * 2 * math.pi));
+            data[i] = int(data[i]) & 0xff
+        print_table(data, sin_title)
+# cos can't overlap sin if X & Y are offset
+        data = []
+        for i in range(0, 256):
+            data.append(x + r * math.cos(float(i) / 256 * 2 * math.pi));
+            data[i] = int(data[i]) & 0xff
+        print_table(data, cos_title)
+
 
 # generate a 2D gear
 # from https://github.com/davidanthonygardner/glxgears/blob/master/glxgears.c
 # and 3d_arduino/genmodel.py
-def gear(inner_radius, outer_radius, teeth, tooth_depth, shaft_points, gear, shaft):
+def gear(inner_radius, outer_radius, teeth, tooth_depth, shaft_points, x, y, gear, shaft):
 # premultiplied sin * cos for every angle
 # sin * (outer radius - tooth_depth / 2.0)
-    circle_table(gear + '_sin_r1:', gear + '_cos_r1:', outer_radius - tooth_depth / 2.0)
+    circle_table(gear + '_sin_r1:', gear + '_cos_r1:', outer_radius - tooth_depth / 2.0, x, y)
 # sin * (outer radius + tooth_depth / 2.0)
-    circle_table(gear + '_sin_r2:', gear + '_cos_r2:', outer_radius + tooth_depth / 2.0)
+    circle_table(gear + '_sin_r2:', gear + '_cos_r2:', outer_radius + tooth_depth / 2.0, x, y)
 # sin * inner radius
-    circle_table(shaft + '_sin_r:', shaft + '_cos_r:', inner_radius)
+    circle_table(shaft + '_sin_r:', shaft + '_cos_r:', inner_radius, x, y)
 
 # angle tables
     teeth_a = []
@@ -86,8 +101,8 @@ def gear(inner_radius, outer_radius, teeth, tooth_depth, shaft_points, gear, sha
     da = 2.0 * math.pi / teeth / 4.0
 
 # teeth angles
-    for i in range(0, teeth + 1):
-       angle = i * 2.0 * math.pi / (teeth + 1);
+    for i in range(0, teeth):
+       angle = i * 2.0 * math.pi / teeth;
        teeth_a.append(toAngle(angle))
        teeth_a.append(toAngle(angle + da))
        teeth_a.append(toAngle(angle + 2 * da))
@@ -111,8 +126,56 @@ def gear(inner_radius, outer_radius, teeth, tooth_depth, shaft_points, gear, sha
 
 
 # from 3d_arduino/genmodel.py
-#gear(10, 50, 20, 5, 10, "gear1", "shaft1")
-gear(20, 70, 10, 20, 10, "gear1", "shaft1")
+CENTER_X = 20
+CENTER_Y = -5
+gear(10,       # inner_radius
+    50,        # outer_radius
+    20,        # teeth
+    10,        # tooth_depth
+    8,         # shaft_points
+    CENTER_X - 40, # X
+    CENTER_Y + 30, # Y
+    "gear1", 
+    "shaft1")
+
+gear(15,       # inner_radius
+    25,        # outer_radius
+    10,        # teeth
+    10,        # tooth_depth
+    8,         # shaft_points
+    CENTER_X - 40,  # X
+    CENTER_Y - 50,  # Y
+    "gear2", 
+    "shaft2")
+
+gear(5,        # inner_radius
+    25,        # outer_radius
+    10,        # teeth
+    10,        # tooth_depth
+    4,         # shaft_points
+    CENTER_X + 40, # X
+    CENTER_Y + 30, # Y
+    "gear3", 
+    "shaft3")
+
+#gear(20,      # inner_radius
+#    60,       # outer_radius
+#    10,       # teeth
+#    20,       # tooth_depth
+#    8,       # shaft_points
+#    -20,      # X
+#    0,       # Y
+#    "gear1", 
+#    "shaft1")
+#gear(20,      # inner_radius
+#    60,       # outer_radius
+#    6,       # teeth
+#    10,       # tooth_depth
+#    8,       # shaft_points
+#    -50,      # X
+#    0,       # Y
+#    "gear1", 
+#    "shaft1")
 
 
 
