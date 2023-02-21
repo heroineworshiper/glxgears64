@@ -169,13 +169,15 @@ mane_loop:
     beq flush_keypress
         jsr getin
 
-; empty the buffer
 flush_keypress:
-    jsr $ffe4
-    bne flush_keypress
+; empty the buffer
+;    jsr $ffe4
+;    bne flush_keypress
 
-; auto rotate Z
+; auto rotate
     inc rz
+;    inc ry
+;    inc rx
 
 .else
 
@@ -194,13 +196,16 @@ flush_keypress:
 ; repeat
     jmp mane_loop
 
+
+;ROTATE_STEP = 2
+ROTATE_STEP = 8
 ; handle a buffered keypress
 getin:
     cmp #$91     ; up
     bne getin2
         sec
         lda rx
-        sbc #8
+        sbc #ROTATE_STEP
         sta rx
         rts
 getin2:
@@ -208,7 +213,7 @@ getin2:
     bne getin3
         clc
         lda rx
-        adc #8
+        adc #ROTATE_STEP
         sta rx
         rts
 getin3:
@@ -216,7 +221,7 @@ getin3:
     bne getin4
         clc
         lda ry
-        adc #8
+        adc #ROTATE_STEP
         sta ry
         rts
 getin4:
@@ -224,7 +229,7 @@ getin4:
     bne getin5
         sec
         lda ry
-        sbc #8
+        sbc #ROTATE_STEP
         sta ry
         rts
 getin5:
