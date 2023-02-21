@@ -42,7 +42,7 @@ Do 'make cube2' to create a demo disk of the optimized cube.
 Do 'make glxgears' to create a demo disk of glxgears.
 Do 'make run' to run the demo disk in the emulator.
 
-Uncommment INTERACTIVE to select cursor key rotation or automatic rotation
+Uncommment INTERACTIVE in common_vars.inc to select cursor key rotation or automatic rotation
 
 
 
