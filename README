@@ -1,0 +1,32 @@
+3D bitmap graphics on a commodore 64
+
+What you'll find here:
+
+
+cube.s: the original cube demo ported straight to CA65
+
+cube2.s: optimized cube demo to test concepts
+
+genmodels.py: create the gear models
+
+glxgears.s: gear demo derived from the optimized cube demo
+
+tables.py: create the trig tables
+
+
+Original files came from 
+https://retro64.altervista.org/blog/an-introduction-to-vector-based-graphics-the-commodore-64-rotating-simple-3d-objects/
+    vector_05_bigger2_y_v2.s: XY rotation
+    vector_05_v2.s: Y rotation only
+
+Building requires cc65.
+
+Do 'make cube2' to create a demo disk of the optimized cube.
+Do 'make glxgears' to create a demo disk of glxgears.
+Do 'make run' to run the demo disk in the emulator.
+
+Uncommment INTERACTIVE to select cursor key rotation or automatic rotation
+
+
+
+

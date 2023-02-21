@@ -1,0 +1,49 @@
+#!/usr/bin/python
+
+# generate the trig tables
+# values are -63 to 63
+
+import math
+
+
+
+print("cos_table:")
+
+string = ""
+line = 0
+for i in range(0, 256):
+    if line == 0:
+        string = "    .byte "
+    if line > 0:
+        string += ", "
+
+    value = math.cos(float(i) / 256 * 2 * math.pi)
+    string += "$%02x" % (int(value * 63) & 0xff)
+    line += 1
+    if line >= 8:
+        print(string)
+        line = 0
+if line > 0:
+    print(string)
+
+
+
+print("\nsin_table:")
+string = ""
+line = 0
+for i in range(0, 256):
+    if line == 0:
+        string = "    .byte "
+    if line > 0:
+        string += ", "
+
+    value = math.sin(float(i) / 256 * 2 * math.pi)
+    string += "$%02x" % (int(value * 63) & 0xff)
+    line += 1
+    if line >= 8:
+        print(string)
+        line = 0
+if line > 0:
+    print(string)
+
+

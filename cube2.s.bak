@@ -1,0 +1,1402 @@
+; ported from
+; https://retro64.altervista.org/blog/an-introduction-to-vector-based-graphics-the-commodore-64-rotating-simple-3d-objects/
+
+; compile with make cube2
+
+
+.autoimport	on              ; imports C library functions
+.forceimport	__STARTUP__ ; imports STARTUP, INIT, ONCE
+.export		_main           ; expose mane to the C library
+.include        "zeropage.inc"
+
+
+; macros
+BMP0 = $6000   ; starting address of bitmap
+BMP1 = $2000
+
+; use 16 bit X
+;USE_X16 = 1
+
+
+; rotate which axis.  Enable 1
+;ROTATE_Y = 1
+ROTATE_XY = 1
+
+
+; zero page aliases
+byteaddr := tmp1		; 2 bytes
+
+
+; macros
+; copy using acumulator as a temporary
+.macro COPY_REG16 srchi, srclo, dsthi, dstlo
+    lda srchi
+    sta dsthi
+    lda srclo
+    sta dstlo
+.endmacro
+
+; dst = a - b
+.macro SUB_REG16 a_hi, a_lo, b_hi, b_lo, dst_hi, dst_lo
+    sec
+    lda a_lo                ; subtract low bytes
+    sbc b_lo
+    sta dst_lo              ; result low -> prod + 1
+    lda a_hi                ; subtract high bytes
+    sbc b_hi
+    sta dst_hi              ; result high -> prod
+.endmacro
+
+; dst = a + b
+.macro ADD_REG16 a_hi, a_lo, b_hi, b_lo, dst_hi, dst_lo
+    clc
+    lda a_lo
+    adc b_lo
+    sta dst_lo
+    lda a_hi
+    adc b_hi
+    sta dst_hi
+.endmacro
+
+
+; multiply register * accumulator & store the result in product_hi, product_lo
+.macro MULTIPLY_REGxA reg
+    sta multiply_b
+    lda reg
+    sta multiply_a
+    jsr multiply_ab8
+.endmacro
+
+; global variables
+.segment	"DATA"
+
+current_screen:   .res 1       ; flag for double-buffering 
+x1:			.res	2
+y1:			.res	1
+x2:			.res	2
+y2:			.res	1
+delta_x:	.res	2
+delta_y:	.res	1
+x_n:		.res	1
+y_n:		.res	1
+
+accumulator:     .res	1
+limit:           .res	1
+xp:		         .res	2
+rx:              .res	1
+ry:              .res	1
+c_x:             .res 1  ; cos for the X rotation
+s_x:             .res 1  ; sin for the X rotation
+c_y:             .res 1  ; cos for the Y rotation
+s_y:             .res 1  ; sin for the Y rotation
+point_index:     .res	1
+draw_count:      .res	1
+product2_hi:     .res	1 ; temporary multiply result
+product2_lo:     .res	1
+temp_y:          .res	1
+temp_x:          .res	1
+temp_z:          .res	1
+n_flag_divs:     .res	1
+multiplicand_sign8:   .res	1
+multiplier_sign8:     .res	1
+multiply_a:      .res	1        ; input argument A
+product_hi:      .res	1        ; high byte of multiply result
+product_lo:      .res	1        ; low byte of multiply result                  	
+multiply_b := product_hi         ; input argument B.  Same address as result
+
+TOTAL_COORDS = 8
+
+vex:       .res TOTAL_COORDS
+vey:       .res TOTAL_COORDS                      
+
+; rotated coordinates
+xd_coords: .res TOTAL_COORDS
+yd_coords: .res TOTAL_COORDS
+zd_coords: .res TOTAL_COORDS
+
+
+.segment	"RODATA"
+;starting vertexes coordinates in two's complement form
+
+; no clipping support
+XSIZE = 50 ; max 70
+YSIZE = 50 ; max 60
+ZSIZE = 50 ; max 64
+x_coords: 
+    .byte    256-XSIZE, 256-XSIZE, XSIZE, XSIZE, 256-XSIZE, 256-XSIZE, XSIZE, XSIZE
+y_coords: 
+    .byte    256-YSIZE, YSIZE, YSIZE, 256-YSIZE, 256-YSIZE, YSIZE, YSIZE, 256-YSIZE
+z_coords: 
+    .byte    256-ZSIZE, 256-ZSIZE, 256-ZSIZE, 256-ZSIZE, ZSIZE, ZSIZE, ZSIZE, ZSIZE
+
+.include "tables.inc"
+
+
+.segment	"CODE"
+.proc	_main: near
+
+
+; select the screen for new drawing
+; set up drawing on BMP1
+    lda #1
+    sta current_screen
+    lda #<ytablehigh_BMP1
+    sta ytablemod + 1
+    lda #>ytablehigh_BMP1
+    sta ytablemod + 2
+; set up drawing on BMP0
+;    lda #0
+;    sta current_screen
+;    lda #<ytablehigh_BMP0
+;    sta ytablemod + 1
+;    lda #>ytablehigh_BMP0
+;    sta ytablemod + 2
+
+	lda	#5
+	sta	$d020
+	sta	$d021
+
+    ldy	#187
+	sty	$d011		;bitmap mode
+
+	lda	$dd02
+	ora	#3
+	sta	$DD02		;CIA-2 I/O default value 		
+
+	lda	$dd00		;CIA-2 bank 1 for VIC
+	and	#252
+	ora	#2
+	sta	$dd00
+
+	lda $d018
+	and	#15
+	ora	#112
+	sta	$d018		;matrix from 16384+7168=23552
+
+	lda	$d018
+	and	#240
+	ora	#8
+	sta	$d018		;bmp base from 16384+8192 = 24576		
+
+
+; set white pen on dark blue paper (also clears sprite pointers) on screen 2 
+
+	ldx	#$00
+	lda	#22
+loopcol:
+	sta	23552,x		;sta	$400,x
+	sta	23552+256,x	;sta	$500,x
+	sta	23552+512,x	;sta	$600,x
+	sta	23552+768,x	;sta	$700,x
+	inx
+	bne	loopcol
+
+; set white pen on dark blue paper (also clears sprite pointers) on screen 1
+
+	ldx	#$00
+	lda	#22
+loopcol2:
+    sta	1024,x		;sta	$400,x
+	sta	1024+256,x	;sta	$500,x
+	sta	1024+512,x	;sta	$600,x
+	sta	1024+768,x	;sta	$700,x
+	inx
+	bne	loopcol2
+        jsr clear_BMP0
+        jsr clear_BMP1
+
+
+; test point
+;X1_ = 70
+;Y1_ = 31
+;    lda #>X1_   ; high byte
+;    sta x1
+;    lda #<X1_   ; low byte
+;    sta x1 + 1
+;    lda #Y1_
+;    sta y1
+;    jsr plot
+
+; test line
+;X1 = 0
+;Y1 = 0
+;X2 = 255
+;Y2 = 100
+;    lda #>X1
+;    sta x1
+;    lda #<X1
+;    sta x1+1
+;    lda #Y1
+;    sta y1
+;    lda #>X2
+;    sta x2
+;    lda #<X2
+;    sta x2+1
+;    lda #Y2
+;    sta y2
+;    jsr line_subroutine
+;    rts
+
+
+
+; draw 3d cube
+;set rotation angles to 0
+    lda #0
+    sta rx                  
+    lda #0
+    sta ry
+
+cube_loop:
+; only 1 trig lookup needed per frame if rotating 1 axis or both axes by the same
+; amount
+; look up X rotation
+    ldx rx
+    lda cos_table, x
+    sta c_x
+
+    lda sin_table, x 
+    sta s_x
+; look up Y rotation
+    ldx ry
+    lda cos_table, x
+    sta c_y
+
+    lda sin_table, x 
+    sta s_y
+
+
+    lda #0                  ;loop counter for eight points (from 0 to 7)
+    sta point_index 
+
+; rotate 1 point
+rotate_loop:
+; computes yd(np) = (c*yt-s*z(np))/offset
+
+
+
+.ifdef ROTATE_Y
+    ldy point_index
+    lda y_coords, y         ; yt -> a, temp_y
+    sta temp_y 
+    MULTIPLY_REGxA c_y        ; product2 = c * yt
+    COPY_REG16 product_hi, product_lo, product2_hi, product2_lo
+
+    ldy point_index 
+    lda z_coords, y 
+    MULTIPLY_REGxA s_y        ; product = s * z(np) 
+; product2 = c * yt - s*z(np)
+    SUB_REG16 product2_hi, product2_lo, product_hi, product_lo, product2_hi, product2_lo
+    jsr divide_product2_signed         ; divide product2 by offset 64
+
+    ldy point_index 
+    lda product2_lo
+    sta yd_coords, y
+
+; compute zd(np) =(s*yt + c*z(np))/offset
+    lda temp_y
+    MULTIPLY_REGxA s_y        ; product2 = s * yt
+    COPY_REG16 product_hi, product_lo, product2_hi, product2_lo
+
+    ldy point_index 
+    lda z_coords, y 
+    MULTIPLY_REGxA c_y        ; product = c * z(np) 
+
+; product2 = s * yt + c * z(np) 
+    ADD_REG16 product_hi, product_lo, product2_hi, product2_lo, product2_hi, product2_lo
+    jsr divide_product2_signed         ;divide prod by offset 64
+
+    ldy point_index 
+    lda product2_lo
+    sta zd_coords, y
+    lda x_coords, y
+    sta xd_coords, y     ; x stays the same 
+
+.endif ; ROTATE_Y
+
+
+
+.ifdef ROTATE_XY
+; rotation about x axis 
+; compute yd(np) = (c*yt-s*z(np))/offset
+    ldy point_index
+    lda y_coords, y         ; yt -> a, temp_y
+    sta temp_y 
+    MULTIPLY_REGxA c_x        ; c * yt -> product2
+    COPY_REG16 product_hi, product_lo, product2_hi, product2_lo
+    ldy point_index         ; s * z(np)
+    lda z_coords, y 
+    MULTIPLY_REGxA s_x
+; product2 = c * yt - s*z(np)
+    SUB_REG16 product2_hi, product2_lo, product_hi, product_lo, product2_hi, product2_lo
+
+    jsr divide_product2_signed  ; divide result by fixed point offset (64)
+
+    ldy point_index         ; store rotated Y result
+    lda product2_lo
+    sta yd_coords, y
+
+
+
+
+; compute zd(np) =(s*yt + c*z(np))/offset
+    lda temp_y
+    MULTIPLY_REGxA s_x        ; s * yt -> product2
+    COPY_REG16 product_hi, product_lo, product2_hi, product2_lo
+
+    ldy point_index 
+    lda z_coords, y 
+    MULTIPLY_REGxA c_x        ; c * z(np) -> product 
+
+; product2 = s*yt + c*z(np)
+    ADD_REG16 product_hi, product_lo, product2_hi, product2_lo, product2_hi, product2_lo
+    jsr divide_product2_signed         ; divide product2 by offset 64
+
+    ldy point_index 
+    lda product2_lo
+    sta zd_coords, y
+    sta temp_z              ; used for the following formula 
+
+
+
+; rotation about y axis 
+; compute xd(np) = (c*xt+s*zt)/offset
+    ldy point_index         ; xt -> a, temp_x
+    lda x_coords, y 
+    sta temp_x 
+    MULTIPLY_REGxA c_y        ; c * xt -> product2
+    COPY_REG16 product_hi, product_lo, product2_hi, product2_lo
+    lda temp_z 
+    MULTIPLY_REGxA s_y        ; s * zt
+
+; product2 <---- product + s * zt
+    ADD_REG16 product_hi, product_lo, product2_hi, product2_lo, product2_hi, product2_lo
+
+    jsr divide_product2_signed         ;divide product2 by offset 64
+
+    ldy point_index 
+    lda product2_lo
+    sta xd_coords, y
+
+; compute zd(np) =(c*zt-s*xt)/offset
+    lda temp_z 
+    MULTIPLY_REGxA c_y        ; product2 = c * zt 
+    COPY_REG16 product_hi, product_lo, product2_hi, product2_lo
+
+    lda temp_x  
+    MULTIPLY_REGxA s_y        ; product = s * xt
+
+; product2 = product2 - s*xt 
+    SUB_REG16 product2_hi, product2_lo, product_hi, product_lo, product2_hi, product2_lo
+    jsr divide_product2_signed         ;divide prod by offset 64
+
+    ldy point_index 
+    lda product2_lo
+    sta zd_coords, y
+
+.endif ; ROTATE_XY
+
+
+
+
+; project xd 
+    lda zd_coords, y 
+    bpl positive_zd
+        sec
+        lda #$00
+        sbc zd_coords,y 
+        tax                     ;takes complement of zd and puts it in x 
+        lda projneg, x          ;loads negative value of projection coefficient
+        jmp skip_positive_zd
+
+positive_zd:
+    ldx zd_coords, y
+    lda projpos, x          ;loads positive value of projection coefficient 
+
+skip_positive_zd:
+    sta multiply_a
+    lda xd_coords, y 
+    sta multiply_b 
+    jsr multiply_ab8        ; projpos or neg * xd_coords 
+    jsr divide_signed       ; product /= 64
+    ldy point_index 
+
+    clc
+    lda product_lo
+    adc #128
+    sta vex,y                 ;x vertex 
+
+;jmp here 
+
+;projects yd 
+    lda zd_coords, y 
+    bpl positive_zd2
+    sec
+    lda #$00
+    sbc zd_coords,y 
+    tax                     ;takes complement of zd and puts it in x 
+    lda projneg, x          ;loads negative value of projection coefficient
+    jmp skip_positive_zd2
+
+
+positive_zd2:
+    ldx zd_coords, y    
+    lda projpos, x          ;loads positive value of projection coefficient 
+                
+skip_positive_zd2:
+    sta multiply_a
+    lda yd_coords, y        ;now project yd  
+    sta multiply_b 
+    jsr multiply_ab8        ;projpos or neg * xd_coords 
+    jsr divide_signed       ; product /= 64
+    ldy point_index 
+    clc
+    lda product_lo
+    adc #100
+    sta vey,y                 ;y vertex 
+
+; next point
+    inc point_index 
+    lda point_index 
+    cmp #08
+    bne jump_rotate_loop
+        jmp draw_it 
+
+jump_rotate_loop:
+    jmp rotate_loop 
+                
+				
+draw_it:
+;draws the cube
+    lda current_screen 
+    bne use_screen2 
+        jsr clear_part_BMP0  ; clear part of screen
+                             ; switch from buffer2 to buffer1
+        jmp skip_use_screen2
+
+use_screen2:
+    jsr clear_part_BMP1  ; clears part of screen
+                         ; start base on plot: actual_screen+2, actual_screen+3
+                         ; switch from buffer 1 to buffer 2 
+
+skip_use_screen2:
+    lda #$00
+    sta x1
+    sta x2                  ;high bytes of x coordinates are 0 (x vertexes are 8 bit)        
+
+
+    ldy #$00
+    sta draw_count 
+
+    lda vex, y
+    sta x1+1
+    lda vey, y 
+    sta y1 
+
+    iny 
+    inc draw_count 
+
+    lda vex, y
+    sta x2+1 
+    lda vey, y
+    sta y2 
+
+    jsr line_subroutine     ;line (vx(0), vy(0) - vx(1) ,vy(1)) 
+
+
+    ldy draw_count 
+
+    lda vex, y 
+    sta x1+1
+
+    lda vey, y
+    sta y1 
+
+
+    iny 
+    inc draw_count 
+
+    lda vex, y
+    sta x2+1
+    lda vey, y 
+    sta y2 
+
+
+    jsr line_subroutine     ;line (vx(1), vy(1) - vx(2), vy(2)) 
+
+    ldy draw_count 
+
+    lda vex, y 
+    sta x1+1
+
+    lda vey, y
+    sta y1 
+
+
+    iny 
+    inc draw_count 
+
+    lda vex, y
+    sta x2+1
+    lda vey, y 
+    sta y2 
+
+    jsr line_subroutine     ;line (vx(2), vy(2) - vx(3), vy(3)) 
+
+    ldy draw_count 
+
+    lda vex, y 
+    sta x1+1
+
+    lda vey, y
+    sta y1 
+
+
+    ldy #0
+    sty draw_count
+
+    lda vex, y
+    sta x2+1
+    lda vey, y 
+    sta y2 
+
+    jsr line_subroutine     ;line (vx(3), vy(3) - vx(1), vy(1)) 
+
+    ldy #4
+    sty draw_count
+
+    lda vex, y 
+    sta x1+1
+
+    lda vey, y
+    sta y1 
+
+
+    iny 
+    inc draw_count 
+
+    lda vex, y
+    sta x2+1
+    lda vey, y 
+    sta y2 
+
+    jsr line_subroutine     ;line (vx(4), vy(4) - vx(5), vy(5)) 
+
+    ldy draw_count 
+
+    lda vex, y 
+    sta x1+1
+
+    lda vey, y
+    sta y1 
+
+
+    iny 
+    inc draw_count 
+
+    lda vex, y
+    sta x2+1
+    lda vey, y 
+    sta y2 
+
+    jsr line_subroutine     ;line (vx(5), vy(5) - vx(6), vy(6)) 
+
+    ldy draw_count 
+
+    lda vex, y 
+    sta x1+1
+
+    lda vey, y
+    sta y1 
+
+
+    iny 
+    inc draw_count 
+
+    lda vex, y
+    sta x2+1
+    lda vey, y 
+    sta y2 
+
+    jsr line_subroutine     ;line (vx(6), vy(6) - vx(7), vy(7)) 
+
+    ldy draw_count 
+
+    lda vex, y 
+    sta x1+1
+
+    lda vey, y
+    sta y1 
+
+
+    ldy #04
+    sty draw_count 
+
+    lda vex, y
+    sta x2+1
+    lda vey, y 
+    sta y2 
+
+    jsr line_subroutine     ;line (vx(7), vy(7) - vx(4), vy(4)) 
+
+    ldy #00
+
+    lda vex, y 
+    sta x1+1
+
+    lda vey, y
+    sta y1 
+
+
+    ldy #4
+
+    lda vex, y
+    sta x2+1
+    lda vey, y 
+    sta y2 
+
+    jsr line_subroutine     ;line (vx(0), vy(0) - vx(4), vy(4)) 
+
+    ldy #03
+
+    lda vex, y 
+    sta x1+1
+
+    lda vey, y
+    sta y1 
+
+
+    ldy #7
+
+    lda vex, y
+    sta x2+1
+    lda vey, y 
+    sta y2 
+
+    jsr line_subroutine     ;line (vx(3), vy(3) - vx(7), vy(7)) 
+
+    ldy #01
+
+    lda vex, y 
+    sta x1+1
+
+    lda vey, y
+    sta y1 
+
+
+    ldy #5
+
+    lda vex, y
+    sta x2+1
+    lda vey, y 
+    sta y2 
+
+    jsr line_subroutine     ;line (vx(1), vy(1) - vx(5), vy(5)) 
+
+    ldy #02
+
+    lda vex, y 
+    sta x1+1
+
+    lda vey, y
+    sta y1 
+
+
+    ldy #6
+
+    lda vex, y
+    sta x2+1
+    lda vey, y 
+    sta y2 
+
+    jsr line_subroutine     ;line (vx(2), vy(2) - vx(6), vy(6))
+
+; cube drawn
+    lda current_screen
+    bne screen2_active
+        jsr alt_mem
+        jmp skip_alt_mem
+                
+screen2_active:
+    jsr pref_mem  
+                
+                
+skip_alt_mem:
+    lda current_screen
+    eor #$01
+    sta current_screen         ;switchs flag for double buffering 
+
+;key_read_loop   jsr $ffe4
+;                beq key_read_loop
+
+; increment XY rotation
+    inc rx
+    inc rx
+    inc rx
+    inc rx
+    inc ry
+    inc ry
+    inc ry
+    inc ry
+    jmp cube_loop 
+
+
+
+
+
+
+
+
+
+
+; 8 bit X only
+line_subroutine:
+; computes deltax, deltay, decides what routine to be used
+    ;lda x1
+    ;cmp x2
+    ;bcc compute_delta_x2_x1
+    ;bne compute_delta_x1_x2        ;high bytes unused
+    lda x1+1
+    cmp x2+1
+    bcc compute_delta_x2_x1			;compares x1 and x2 
+
+compute_delta_x1_x2:
+    sec
+    lda x1+1
+    sbc x2+1
+    sta delta_x+1
+    ;lda x1
+    ;sbc x2
+    ;sta delta_x				;delta_x = x1-x2
+
+    lda #$01
+    sta x_n					    ;delta_x negative
+
+    jmp skip_compute_delta_x2_x1
+
+compute_delta_x2_x1:
+    sec
+    lda x2+1
+    sbc x1+1
+    sta delta_x+1
+    ;lda x2
+    ;sbc x1 
+    ;sta delta_x				;delta_x = x2-x1
+
+    lda #$00
+    sta x_n					;delta_x positive
+
+skip_compute_delta_x2_x1:
+
+    lda y1
+    cmp y2
+    bcc compute_delta_y2_y1			;compares y1 and y2
+
+    sec
+    lda y1
+    sbc y2
+    sta delta_y				;delta_y = y1 - y2
+
+    lda #$01
+    sta y_n					;delta_y negative					
+
+    jmp skip_compute_delta_y2_y1
+
+compute_delta_y2_y1:
+
+    sec
+    lda y2
+    sbc y1
+    sta delta_y				;delta_y = y2 - y1
+
+    lda #$00
+    sta y_n					;delta_y positive
+
+skip_compute_delta_y2_y1:
+
+
+    ;lda delta_x 
+    ;bne jump_110				;if high byte delta_x <> 0 then delta_x > delta_y
+                                            ;high bytes unused 
+    lda delta_x+1
+    cmp delta_y 
+    bcc jump_170			        ;if delta_x+1 < delta_y use routine 170
+
+jump_110:
+	jsr line_110			        ;else use routine 110
+
+	jmp skip_jump_170
+
+jump_170:
+    jsr line_170
+
+
+skip_jump_170:	
+	rts
+
+
+
+
+
+; fast line 
+
+line_110:
+;based on v1.3 SLJ 7/2/94
+    ;x is only 8 bit - for the cube program is enough 
+
+    lda #$00
+    sta x2
+    sta x1                                  ;set high bytes to zero
+    sta xp 
+    sta accumulator                         ;zeroes accumulator for line drawing 
+
+    lda     x2+1 
+    sta     limit
+
+    lda     x_n 
+    bne     dec_limit
+
+    inc     limit 
+    jmp     skip_dec_limit 
+
+dec_limit:
+    dec     limit 
+
+skip_dec_limit:
+    sec
+    LDA	accumulator              
+    SBC     delta_x+1 
+    sta     accumulator
+
+LOOPL:
+    jsr     plot 
+
+LOOPLremoved:
+    lda     x_n 
+    bne     dec_x                           ;checks for delta_x sign  
+
+    INC     x1+1	                        ;Step in x
+    jmp     skip_dec_x 
+
+dec_x:
+    DEC     x1+1 
+
+skip_dec_x:
+    clc
+    lda     accumulator 
+    ADC	delta_y	                        ;Add DY
+    sta     accumulator 
+    BCC     NOPE	                        ;Time to step in y?
+
+    lda     y_n
+    bne     dec_y
+
+    INC	y1	                        ;Step in y
+
+    jmp     skip_dec_y
+
+dec_y:
+    dec     y1 
+
+skip_dec_y:
+    SEC 
+    LDA     accumulator 
+    SBC	delta_x+1	                ;Reset counter
+    sta     accumulator 
+
+NOPE:
+    lda     x1+1
+    cmp     limit 	                        ;At the endpoint yet?
+    bne	LOOPL
+    RTS
+
+
+;fast line for dy > dx
+line_170:
+;based on v1.3 SLJ 7/2/94
+    ;x is only 8 bit - for the cube program is enough 
+
+    lda #$00
+    sta x2
+    sta x1                                   ;set high bytes to zero
+    sta xp 
+    sta accumulator                         ;zeroes accumulator for line drawing 
+
+    lda     y2 
+    sta     limit
+
+    lda     y_n 
+    bne     dec_limit2
+
+    inc     limit 
+    jmp     skip_dec_limit2 
+
+dec_limit2:
+    dec     limit 
+
+skip_dec_limit2:
+    sec
+    LDA	accumulator              
+    SBC     delta_y
+    sta     accumulator
+
+LOOPL2:
+    jsr     plot 
+
+
+LOOPL2removed:
+    lda     y_n 
+    bne     dec_y2                          ;checks for delta_x sign  
+
+    INC     y1	                        ;Step in y
+    jmp     skip_dec_y2 
+
+dec_y2:
+    DEC     y1 
+
+skip_dec_y2:
+    clc
+    lda     accumulator 
+    ADC	delta_x+1	                ;Add DX
+    sta     accumulator 
+    BCC     NOPE2	                        ;Time to step in x?
+
+    lda     x_n
+    bne     dec_x2
+
+    INC	x1+1	                        ;Step in x
+
+    jmp     skip_dec_x2
+
+dec_x2:
+    dec     x1+1 
+
+skip_dec_x2:
+    SEC 
+    LDA     accumulator 
+    SBC	delta_y 	                ;Reset counter
+    sta     accumulator 
+
+NOPE2:
+    ;jsr     plot		                ;Plot the point
+    lda     y1
+    cmp     limit      	                ;At the endpoint yet?
+    bne	LOOPL2
+    RTS
+
+
+
+; plot a point (codebase64.org)
+
+plot:
+; BMP0 = start of bitmap screen
+; byteaddr = address of the byte where the point to plot lies
+    ldy y1
+    ldx x1 + 1        ; X low byte  -> X
+
+
+.ifdef USE_X16
+; reset the lookup table after the last plot command
+    lda #>xtablehigh
+    sta XTBmdf + 2	  ; self modifying code
+
+    lda x1            ; X high byte -> A
+    beq skipadj       ; branch if high byte 0
+
+; add high byte to the lookup table so the index can be only 8 bits
+        lda #>(xtablehigh + $ff)		;added brackets, otherwise it won't work
+        sta XTBmdf + 2	  ; self modifying code
+skipadj:
+.endif ; USE_X16
+
+; compute low byte of destination address from lookup tables
+    lda ytablelow, y
+    clc
+    adc xtablelow, x
+    sta byteaddr
+
+; high byte of destination address comes from Y only
+ytablemod:
+    lda ytablehigh_BMP0,y
+
+.ifdef USE_X16
+XTBmdf:
+; xtablehigh is self modified for X > 255
+    adc xtablehigh,x
+.else
+; add carry bit to high byte
+    adc #00
+.endif
+
+    sta byteaddr + 1
+
+; OR the pixel with the address
+    ldy #$00
+    lda (byteaddr),y
+    ora bitable,x
+    sta (byteaddr),y
+    rts
+
+; clear entire screen
+clear_BMP1:
+	ldy	#32
+    lda	#<BMP1	; set starting address
+	sta	modfull1 + 1
+	lda	#>BMP1
+	sta	modfull1 + 2	
+    jmp loop_clear_full
+
+clear_BMP0:
+	ldy	#32
+    lda	#<BMP0	; set starting address
+	sta	modfull1 + 1
+	lda	#>BMP0
+	sta	modfull1 + 2	
+
+loop_clear_full:
+	ldx	#250
+	lda	#$ff            ;filling value 
+loop_clear_full2:
+	dex
+modfull1:
+    sta	BMP0,x
+    bne	loop_clear_full2
+	    clc
+	    lda	modfull1+1
+	    adc	#250
+	    sta	modfull1+1
+	    lda	modfull1+2
+	    adc	#00
+	    sta	modfull1+2
+	    dey
+	    bne	loop_clear_full
+	        rts
+
+
+; clear cols 0 - 255
+clear_part_BMP1:
+    lda #$00
+    ldx #0
+; loop 256 times
+clear_part_BMP1_loop:
+    sta BMP1+0*320,x
+    sta BMP1+1*320,x
+    sta BMP1+2*320,x
+    sta BMP1+3*320,x
+    sta BMP1+4*320,x
+    sta BMP1+5*320,x
+    sta BMP1+6*320,x
+    sta BMP1+7*320,x
+    sta BMP1+8*320,x
+    sta BMP1+9*320,x
+    sta BMP1+10*320,x
+    sta BMP1+11*320,x
+    sta BMP1+12*320,x
+    sta BMP1+13*320,x
+    sta BMP1+14*320,x
+    sta BMP1+15*320,x
+    sta BMP1+16*320,x
+    sta BMP1+17*320,x
+    sta BMP1+18*320,x
+    sta BMP1+19*320,x
+    sta BMP1+20*320,x
+    sta BMP1+21*320,x
+    sta BMP1+22*320,x
+    sta BMP1+23*320,x
+    sta BMP1+24*320,x
+    inx
+    bne	clear_part_BMP1_loop
+        rts
+
+clear_part_BMP0:
+    lda #$00
+    ldx #0
+; loop 256 times
+clear_part_BMP0_loop:
+    sta BMP0+0*320,x
+    sta BMP0+1*320,x
+    sta BMP0+2*320,x
+    sta BMP0+3*320,x
+    sta BMP0+4*320,x
+    sta BMP0+5*320,x
+    sta BMP0+6*320,x
+    sta BMP0+7*320,x
+    sta BMP0+8*320,x
+    sta BMP0+9*320,x
+    sta BMP0+10*320,x
+    sta BMP0+11*320,x
+    sta BMP0+12*320,x
+    sta BMP0+13*320,x
+    sta BMP0+14*320,x
+    sta BMP0+15*320,x
+    sta BMP0+16*320,x
+    sta BMP0+17*320,x
+    sta BMP0+18*320,x
+    sta BMP0+19*320,x
+    sta BMP0+20*320,x
+    sta BMP0+21*320,x
+    sta BMP0+22*320,x
+    sta BMP0+23*320,x
+    sta BMP0+24*320,x
+    inx
+    bne	clear_part_BMP0_loop
+        rts
+
+
+
+
+
+
+; bitmap memory from 8192, screen memory from 1024, standard 16k bank 
+                
+pref_mem:
+raster2:
+    lda 53265
+    bpl raster2 
+
+; set up plot function
+    lda #<ytablehigh_BMP0
+    sta ytablemod + 1
+    lda #>ytablehigh_BMP0
+    sta ytablemod + 2
+
+	ldy	#28
+	sty	$d018		;bitmap base 8192
+
+    lda $d018
+    and #15
+    ora #16
+    sta $d018           ;default video screen memory (1024) 
+
+    lda	#$17
+	sta	$dd00		;default vic-ii bank
+    rts
+
+                
+; bitmap memory from 24576, screen memory from 23552 
+alt_mem:
+raster1:
+    lda 53265
+    bpl raster1
+
+; set up plot function
+    lda #<ytablehigh_BMP1
+    sta ytablemod + 1
+    lda #>ytablehigh_BMP1
+    sta ytablemod + 2
+
+	lda $d018
+	and	#15
+	ora	#112
+	sta	$d018		;matrix from 16384+7168=23552
+
+	lda	$d018
+	and	#240
+	ora	#8
+	sta	$d018		;bmp base from 16384+8192 = 24576
+
+    lda	$dd00		;CIA-2 bank 1 for VIC
+	and	#252
+	ora	#2
+	sta	$dd00
+    rts 
+
+
+; signed divide by offset 64 (prod, prod+1) 
+divide_product2_signed:
+    lda #$00
+    sta n_flag_divs
+
+    lda product2_hi
+    bpl skip_comp_divide_signed2    
+
+    sec 
+    lda #$00
+    sbc product2_lo
+    sta product2_lo
+    lda #$00
+    sbc product2_hi
+    sta product2_hi                ;takes complement of product 
+
+    lda #$01
+    sta n_flag_divs         ;quotient will be negative 
+
+skip_comp_divide_signed2:
+    lda     product2_lo
+    sta     $fe             ;shift = $fe, holds bits to recover
+    lda     product2_hi
+    sta     product2_lo
+    lda     #$00
+    sta     product2_hi            ;/256
+
+    asl     $fe
+    rol     product2_lo
+    rol     product2_hi            ;*2 => /256 * 2 = /128
+    asl     $fe
+    rol     product2_lo
+    rol     product2_hi            ;*2 => /128 * 2 = /64
+
+                            ;a bit faster than using lsr and ror instructions 
+
+    lda n_flag_divs 
+    bne comp_quotient2       ;if 8 bit result must be negative ,take complement 
+    rts 
+
+comp_quotient2:
+    lda #$00
+    sbc product2_lo
+    sta product2_lo
+    rts 
+
+
+; signed divide product_hi, product_lo by 64
+divide_signed:
+    lda #$00
+    sta n_flag_divs
+
+    lda product_hi
+    bpl skip_comp_divide_signed
+        sec 
+        lda #$00
+        sbc product_lo
+        sta product_lo
+        lda #$00
+        sbc product_hi
+        sta product_hi         ;takes complement of product 
+
+        lda #$01
+        sta n_flag_divs         ;quotient will be negative 
+
+skip_comp_divide_signed:
+    lda     product_lo
+    sta     $fe             ;shift = $fe, holds bits to recover
+    lda     product_hi
+    sta     product_lo
+    lda     #$00
+    sta     product_hi     ;/256
+
+    asl     $fe
+    rol     product_lo
+    rol     product_hi       ;*2 => /256 * 2 = /128
+    asl     $fe
+    rol     product_lo
+    rol     product_hi       ;*2 => /128 * 2 = /64
+
+
+    lda n_flag_divs 
+    bne comp_quotient       ;if 8 bit result must be negative ,take complement 
+        rts 
+
+comp_quotient:
+    sec
+    lda #$00
+    sbc product_lo
+    sta product_lo
+    rts 
+
+
+; signed 8 bit multiply (used for rotations and projections)
+multiply_ab8:
+	lda	#$00
+	sta	product_lo
+
+    sta     multiplicand_sign8 ;multiply_a sign positive
+    sta     multiplier_sign8   ;multiply_b sign positive
+
+	ldx	#8		;number of bits
+
+    lda     multiply_a    ;checks sign on high byte
+    bpl     skip_multiplicand_comp8
+
+    sec
+    lda     #<256
+    sbc     multiply_a
+    sta     multiply_a  ;takes complement of multiply_a 
+
+;multiply_a sign set to negative
+    inc     multiplicand_sign8 
+                
+skip_multiplicand_comp8:
+    lda     multiply_b
+    bpl     loop8            ;checks sign on high byte
+
+    sec
+
+    lda     #<256
+    sbc     multiply_b
+    sta     product_hi      ;takes complement of product_hi 
+
+
+;product_hi sign set to negative
+    inc     multiplier_sign8 
+
+
+; fast multiply 
+
+loop8:       
+    lda #>square_low
+    sta mod12+2
+    lda #>square_high
+    sta mod22+2
+
+    clc
+    lda multiply_a
+    adc multiply_b
+    bcc skip_inc
+
+    inc mod12+2
+    inc mod22+2
+                
+skip_inc:
+    tax             
+
+    sec
+    lda multiply_a
+    sbc multiply_b             
+    bcs no_diff_fix
+
+    sec
+    lda multiply_b
+    sbc multiply_a
+                
+no_diff_fix:    
+    tay
+    sec
+mod12:
+    lda square_low,x 
+    sbc square_low,y
+    sta product_lo
+
+                
+mod22:
+    lda square_high, x
+    sbc square_high, y
+    sta product_hi
+
+
+
+; product_hi is high byte, product_lo is low byte 
+; sign of product evaluation
+
+    lda multiplicand_sign8
+    eor multiplier_sign8         
+
+
+;if product is positive, skip product complement
+    beq skip_product_complement8 
+
+        sec
+        lda #< 65536
+        sbc product_lo
+        sta product_lo
+        lda #> 65536
+        sbc product_hi
+;takes 2 complement of product (16 bit)
+        sta product_hi         
+                
+
+skip_product_complement8:
+	rts
+                
+
+
+.endproc
