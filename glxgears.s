@@ -27,8 +27,8 @@
 
 MAX_COORDS = 200
 
-GEAR1_Z1 = #10
-GEAR1_Z2 = #250
+GEAR1_Z1 = 10
+GEAR1_Z2 = 250
 
 ; total coordinates to draw
 total_coords: .res 1

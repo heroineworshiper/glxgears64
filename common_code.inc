@@ -133,7 +133,7 @@ loopcol2:
 ; starting rotation angles
     lda #0
     sta rx                  
-    lda #224
+    lda #0
     sta ry
     rts
 
