@@ -5,16 +5,22 @@ LD := $(CC65_DIR)ld65
 
 
 
-disk.d64: glxgears cube2 cube
+disk.d64: glxgears glxgears2 cube2 cube
 	c1541 -format "disk,00" d64 disk.d64
 	c1541 -attach disk.d64 -write glxgears glxgears,p
+	c1541 -attach disk.d64 -write glxgears2 glxgears2,p
 	c1541 -attach disk.d64 -write cube2 cube2,p
 	c1541 -attach disk.d64 -write cube cube,p
         
 
 glxgears: glxgears.s gears.inc tables.inc common_code.inc common_vars.inc
-	$(AS) -t c64 glxgears.s
+	$(AS) -t c64 glxgears.s -DDOUBLE_SIDED
 	$(LD) -m glxgears.map -t c64 glxgears.o -o glxgears c64.lib
+
+glxgears2: glxgears2.s gears.inc tables.inc common_code.inc common_vars.inc
+	$(AS) -t c64 glxgears2.s 
+	$(LD) -m glxgears2.map -t c64 glxgears2.o -o glxgears2 c64.lib
+
 #	c1541 -format "disk,00" d64 disk.d64
 #	c1541 -attach disk.d64 -write glxgears glxgears,p
 

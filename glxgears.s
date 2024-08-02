@@ -1,5 +1,5 @@
 ; 3D bitmap graphics on a commodore 64
-; Copyright (C) 2023 Adam Williams <broadcast at earthling dot net>
+; Copyright (C) 2023-2024 Adam Williams <broadcast at earthling dot net>
 ; 
 ; This program is free software; you can redistribute it and/or modify
 ; it under the terms of the GNU General Public License as published by
@@ -24,6 +24,8 @@
 
 .segment	"DATA"
 
+; draw 2 sides
+;DOUBLE_SIDED = 1
 
 MAX_COORDS = 200
 
@@ -80,6 +82,7 @@ vey:        .res MAX_COORDS
     lda #total      ; must be a multiple of 4
     sta total_coords
 
+.ifdef DOUBLE_SIDED
 ; -width -> z1
     lda #00
     sec
@@ -88,6 +91,12 @@ vey:        .res MAX_COORDS
 ; width -> z2
     lda #width
     sta gear_z2
+.else
+    lda #00
+    sta gear_z1
+    sta gear_z2
+.endif
+
 
 ; modify code
     SET_LITERAL16 gear_mod1 + 1, sin_r1
@@ -110,6 +119,7 @@ vey:        .res MAX_COORDS
 .macro PROCEDURAL_SHAFT total, sin_r, cos_r, angles, width
     lda #total
     sta total_coords
+.ifdef DOUBLE_SIDED
 ; -width -> z1
     lda #00
     sec
@@ -118,6 +128,11 @@ vey:        .res MAX_COORDS
 ; width -> z2
     lda #width
     sta gear_z2
+.else
+    lda #00
+    sta gear_z1
+    sta gear_z2
+.endif
 ; modify code
     SET_LITERAL16 shaft_mod1 + 1, angles
     SET_LITERAL16 shaft_mod2 + 1, sin_r
@@ -450,6 +465,7 @@ rotate_loop:
         jmp rotate_loop 
 
 create_back:
+.ifdef DOUBLE_SIDED
 ; create the back side by offsetting the front side
 ; subtract starting front coord from starting back coord
     dec total_coords
@@ -494,11 +510,14 @@ create_back_loop:
     cpx total_coords
     beq project_it
         jmp create_back_loop
+.endif ; DOUBLE_SIDED
 
 
 ; convert all the 3D coordinates to XY
 project_it:
+.ifdef DOUBLE_SIDED
     asl total_coords        ; double the coordinates to process both sides
+.endif
     lda #0                  ; the current point
     sta current_point 
 
@@ -546,13 +565,16 @@ project_loop:
 
 draw_it:
 ; draw front side
+.ifdef DOUBLE_SIDED
     lsr total_coords
+.endif
     lda #0
     sta start_point
     lda total_coords
     sta end_point
     jsr draw_closed_polygon
 
+.ifdef DOUBLE_SIDED
 ; draw back side
     lda total_coords
     sta start_point
@@ -561,6 +583,8 @@ draw_it:
     jsr draw_closed_polygon
 
     jsr draw_joiners
+.endif
+
 ; end do_rotate
     rts
 

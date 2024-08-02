@@ -30,6 +30,7 @@ glxgears.s: gear demo derived from the optimized cube demo
 
 tables.py: create the trig tables
 
+glxgears.sh: automatically run the emulator
 
 Original files came from 
 https://retro64.altervista.org/blog/an-introduction-to-vector-based-graphics-the-commodore-64-rotating-simple-3d-objects/
@@ -38,9 +39,8 @@ https://retro64.altervista.org/blog/an-introduction-to-vector-based-graphics-the
 
 Building requires cc65.
 
-Do 'make cube2' to create a demo disk of the optimized cube.
-Do 'make glxgears' to create a demo disk of glxgears.
-Do 'make run' to run the demo disk in the emulator.
+Do 'make disk.d64' to create a demo disk with all the demos
+Run glxgears.sh to run it in the emulator
 
 Uncommment INTERACTIVE in common_vars.inc to select cursor key rotation or automatic rotation
 
