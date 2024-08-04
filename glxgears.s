@@ -25,7 +25,9 @@
 .segment	"DATA"
 
 ; draw 2 sides
-;DOUBLE_SIDED = 1
+;DOUBLE_SIDED := 1
+; orthoganol
+;ORTHOGANOL := 1
 
 MAX_COORDS = 200
 
@@ -524,34 +526,40 @@ project_it:
 project_loop:
     ldy current_point 
 ; get the projection coefficient based on signed Z 
+.ifndef ORTHOGANOL
     ldx zd_coords, y 
     lda proj_table, x
     sta proj_coef
-
-
-; scale X based on projection coefficient
     sta multiply_a
+.endif
+
+
     lda xd_coords, y 
+; scale X based on projection coefficient
+.ifndef ORTHOGANOL
     sta multiply_b 
     jsr multiply_ab8        ; projpos or neg * xd_coords 
     jsr divide_product_64       ; product /= 64
     ldy current_point 
+    lda product_hi
+.endif
 
 ; center X
     clc
-    lda product_hi
     adc #128
     sta vex,y                 ;x vertex 
 
-; scale Y based on projection coefficient
     lda yd_coords, y
+; scale Y based on projection coefficient
+.ifndef ORTHOGANOL
     MULTIPLY_REGxA proj_coef
     jsr divide_product_64       ; product /= 64
     ldy current_point 
+    lda product_hi
+.endif
 
 ; center Y
     clc
-    lda product_hi
     adc #100
     sta vey,y                 ;y vertex 
 
@@ -561,7 +569,6 @@ project_loop:
     cpy total_coords
     beq draw_it
         jmp project_loop 
-
 
 draw_it:
 ; draw front side
