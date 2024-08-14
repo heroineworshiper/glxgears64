@@ -26,8 +26,6 @@
 
 ; draw 2 sides
 ;DOUBLE_SIDED := 1
-; orthoganol
-;ORTHOGANOL := 1
 
 MAX_COORDS = 200
 
@@ -35,18 +33,19 @@ GEAR1_W = 10
 GEAR2_W = 5
 GEAR3_W = 20
 
+; zero page addresses
 ; total coordinates to draw
-total_coords: .res 1
+total_coords := $10
 ; Z rotation of gears
-rz:           .res	1
-temp_rz:      .res  1
-gear_z1:      .res  1
-gear_z2:      .res  1
+rz           := $11
+temp_rz      := $12
+gear_z1      := $13
+gear_z2      := $14
 
 
 ; range of points to draw
-start_point: .res 1
-end_point:   .res 1
+start_point := $15
+end_point   := $16
 
 ; starting coordinates in two's complement form
 x_coords:   .res MAX_COORDS
@@ -191,8 +190,11 @@ flush_keypress:
 ;    jsr $ffe4
 ;    bne flush_keypress
 
-; auto rotate
+; auto rotate the gears
+
     inc rz
+    inc rz
+
 ;    inc ry
 ;    inc rx
 

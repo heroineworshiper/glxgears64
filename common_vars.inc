@@ -17,6 +17,8 @@
 
 ; interactive rotation with cursor keys
 INTERACTIVE = 1
+; orthoganol mode
+ORTHOGANOL := 1
 
 ; use 16 bit X
 ;USE_X16 = 1
@@ -105,44 +107,43 @@ BMP1_COLOR = $8400
 .segment	"DATA"
 
 
-; zero page aliases
-byteaddr := tmp1		; 2 bytes
 
-current_screen:   .res    1       ; flag for double-buffering 
-x1_hi:		      .res    1
-x1_lo:		      .res    1
-y1:			      .res    1
-x2_hi:		      .res    1
-x2_lo:		      .res    1
-y2:			      .res    1
-delta_x:	      .res    2
-delta_y:	      .res    1
-x_n:		      .res    1
-y_n:		      .res    1
+current_screen := $20       ; flag for double-buffering 
+x1_hi := $21
+x1_lo := $22
+y1 := $23
+x2_hi := $24
+x2_lo := $25
+y2 := $26
+byteaddr := $27
+delta_x := $28 ; 2 bytes
+delta_y := $2a
+x_n := $2b
+y_n := $2c
 
-accumulator:     .res	1
-limit:           .res	1
-xp:		         .res	2
-rx:              .res	1
-ry:              .res	1
-c_x:             .res 1   ; cos for the X rotation
-s_x:             .res 1   ; sin for the X rotation
-c_y:             .res 1   ; cos for the Y rotation
-s_y:             .res 1   ; sin for the Y rotation
-current_point:   .res	1
-current_point2:  .res	1
-draw_count:      .res	1
-product2_hi:     .res	1 ; temporary multiply result
-product2_lo:     .res	1
-temp_y:          .res	1
-temp_x:          .res	1
-temp_z:          .res	1
-proj_coef:       .res   1  ; projection coefficient based on Z
-multiply_a_sign: .res	1
-multiply_b_sign: .res	1
-product_hi:      .res	1        ; high byte of multiply result
-product_lo:      .res	1        ; low byte of multiply result                  	
-multiply_a:      .res	1        ; input argument A
+accumulator := $2d
+limit := $2e
+xp := $30
+rx := $32
+ry := $33
+c_x := $34   ; cos for the X rotation
+s_x := $35   ; sin for the X rotation
+c_y := $36   ; cos for the Y rotation
+s_y := $37   ; sin for the Y rotation
+current_point := $38
+current_point2 := $39
+draw_count := $3a
+product2_hi := $3b ; temporary multiply result
+product2_lo := $3c
+temp_y := $3d
+temp_x := $3e
+temp_z := $3f
+proj_coef := $40  ; projection coefficient based on Z
+multiply_a_sign := $41
+multiply_b_sign := $42
+product_hi := $43        ; high byte of multiply result
+product_lo := $44        ; low byte of multiply result                  	
+multiply_a := $45        ; input argument A
 multiply_b := product_hi         ; input argument B.  Same address as result
 
 

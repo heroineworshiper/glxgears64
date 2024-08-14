@@ -24,9 +24,13 @@ cube.s: the original cube demo ported straight to CA65
 
 cube2.s: optimized cube demo to test concepts
 
-genmodels.py: create the gear models
+genmodels.py, genmodels2.py: create the gear models
 
 glxgears.s: gear demo derived from the optimized cube demo
+
+glxgears2.s: gear demo using Bill Budge 3D routines
+    Hit space to start/stop animation
+    Cursor keys rotate it manually
 
 tables.py: create the trig tables
 

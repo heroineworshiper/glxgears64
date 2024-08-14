@@ -48,6 +48,9 @@ z_coords:
 .proc	_main: near
 
     jsr common_init
+; override starting coord
+    lda #10
+    sta ry
 
 cube_loop:
 ; look up X rotation
@@ -197,37 +200,46 @@ rotate_loop:
 .endif ; ROTATE_XY
 
 
-
+; Y contains current point
 
 ; get the projection coefficient based on signed Z 
+.ifndef ORTHOGANOL
     ldx zd_coords, y 
     lda proj_table, x
     sta proj_coef
-
-
 ; scale X based on projection coefficient
     sta multiply_a
+.endif
+
+
     lda xd_coords, y 
+
+.ifndef ORTHOGANOL
     sta multiply_b 
     jsr multiply_ab8        ; projpos or neg * xd_coords 
     jsr divide_product_64       ; product /= 64
     ldy current_point 
+    lda product_hi
+.endif
+
 
 ; center X
     clc
-    lda product_hi
     adc #128
     sta vex,y                 ;x vertex 
 
 ; scale Y based on projection coefficient
     lda yd_coords, y
+
+.ifndef ORTHOGANOL
     MULTIPLY_REGxA proj_coef
     jsr divide_product_64       ; product /= 64
     ldy current_point 
+    lda product_hi
+.endif
 
 ; center Y
     clc
-    lda product_hi
     adc #100
     sta vey,y                 ;y vertex 
 
@@ -480,7 +492,14 @@ draw_it:
 .else
 ; automatic XY rotation
     inc rx
-    inc ry
+    inc rx
+    inc rx
+    inc rx
+    inc rx
+    inc rx
+    inc rx
+    inc rx
+;    inc ry
 .endif
 
 ; repeat

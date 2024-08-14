@@ -426,6 +426,8 @@ xtablemod:
     sta (byteaddr),y
     rts
 
+
+
 ; clear entire screen
 clear_BMP1:
 	ldy	#32
