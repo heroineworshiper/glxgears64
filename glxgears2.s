@@ -21,7 +21,8 @@
 
 
 ; different gear colors in 1 the starting position
-;.define COLOR
+; too ugly to use
+;COLOR = 1
 
 BMP0 = $6000
 BMP0C = $6020 ; offset by 4 columns to center the graphics
@@ -209,7 +210,7 @@ loopgear3x_mod2:
 
 ; initialize it
     SET_LITERAL8 zrot1, 0
-    SET_LITERAL8 zrot2, 1
+    SET_LITERAL8 zrot2, 2
     SET_LITERAL8 zrot3, 8
     SET_LITERAL8 xrot_g, 4
     SET_LITERAL8 yrot_g, 4
